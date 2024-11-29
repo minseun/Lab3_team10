@@ -1,88 +1,28 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <errno.h>
 
-#define BUFSIZE 300
+#define MAX_CMD_LEN 300
+#define MAX_ARG_NUM 50
 
-void handler(int argc, char **argv);
-void launch(int argc, char **argv);
-void handler_SIGINT(int signo);
-void handler_SIGQUIT(int signo);
+pid_t pid = -1;
+
+// 함수 선언
 int getargs(char *cmd, char **argv);
-
-void my_mkdir(int argc, char **argv); 
+void handle_sigint(int signo);
+void handle_sigtstp(int signo);
+void my_mkdir(int argc, char **argv);
 void my_rmdir(int argc, char **argv);
-void ln(int argc, char **argv);
+void my_ln(int argc, char **argv);
 
-pid_t pid;
-
-int main() {
-    signal(SIGINT, handler_SIGINT);
-    signal(SIGTSTP, handler_SIGQUIT);
-
-    char buf[BUFSIZE];
-    char *argv[50];
-    int argc;
-
-    while (1) {
-        printf("Shell> ");
-        fgets(buf, sizeof(buf), stdin);
-        buf[strcspn(buf, "\n")] = '\0';
-
-        if(!strcmp(buf, "exit")) { //exit 누르면 쉘 종료(12-1)
-			printf("쉘 종료 \n");
-			exit(0);
-	    }
-        else if (strlen(buf) == 0 || !strcmp(buf, "\t")) { //사용자가 입력한 문자열을 buf 배열에 저장
-            continue;
-        }
-
-        argc = getargs(buf, argv); //공백을 기준으로 분리해 argv 배열에 저장
-        if (argc == 0) continue; //argc == 0은 명령어가 비어있을 경우, shell이 빈 상태로 enter 쳤을때 shell> 뜰 수 있게.
-
-        handler(argc, argv);//입력받은 명령어 뭔지 판단해서 맞는 함수 호출
-    }
-}
-
-void handler(int argc, char **argv) {
-    int i = 0;
-    int is_background = 0, is_redirection = 0, is_pipe = 0;
-
-    for (i = 0; i < argc; i++) {
-        if ((!strcmp(argv[i], ">")) || (!strcmp(argv[i], "<"))) {
-            is_redirection = 1;
-            break;
-        } else if (!strcmp(argv[i], "|")) {
-            is_pipe = 1;
-            break;
-        } else if (!strcmp(argv[i], "&")) {
-            is_background = 1;
-            break;
-        }
-    }
-
-    if (is_background) {
-        launch(argc, argv);
-        is_background = 0;
-    } else if (!strcmp(argv[0], "mkdir")) {
-        my_mkdir(argc, argv);
-    } else if (!strcmp(argv[0], "rmdir")) {
-        my_rmdir(argc, argv);
-    } else if (!strcmp(argv[0], "ln")) {
-        ln(argc, argv);
-    } else {
-        launch(argc, argv);
-    }
-}
-
-int getargs(char *cmd, char **argv) { // 입력받은거 argv 배열에 저장 argv 배열에 저장하는 함수 함수
+// 입력 받은 내용 나눠서 저장
+int getargs(char *cmd, char **argv) {
     int argc = 0;
-
     while (*cmd) {
         if (*cmd == ' ' || *cmd == '\t') {
             *cmd++ = '\0';
@@ -97,12 +37,65 @@ int getargs(char *cmd, char **argv) { // 입력받은거 argv 배열에 저장 a
     return argc;
 }
 
-void handler_SIGINT(int signo) {
-    printf("\nCtrl-C (쉘 종료)\n");
-    exit(1);
+int main() {
+    char cmd[MAX_CMD_LEN];
+    char *args[MAX_ARG_NUM];
+
+    // 신호 처리기 등록
+    signal(SIGINT, handle_sigint);
+    signal(SIGTSTP, handle_sigtstp);
+
+    while (1) {
+        printf("shell> ");
+        fflush(stdout);
+
+        if (fgets(cmd, MAX_CMD_LEN, stdin) == NULL) {
+            break;
+        }
+
+        // 문자열에서 끝의 줄바꿈 문자 제거
+        cmd[strcspn(cmd, "\n")] = 0;
+
+
+        // 입력 문자열이 비어 있거나 탭만 입력된 경우 처리하지 않고 루프 계속
+        if (strlen(cmd) == 0 || !strcmp(cmd, "\t")) {
+            continue;
+        }
+
+        int argc = getargs(cmd, args);
+        if (argc == 0) continue;
+
+        if (strcmp(args[0], "mkdir") == 0) {
+            my_mkdir(argc, args);
+        } else if (strcmp(args[0], "rmdir") == 0) {
+            my_rmdir(argc, args);
+        } else if (strcmp(args[0], "ln") == 0) {
+            my_ln(argc, args);
+        } else {
+            pid = fork();
+            if (pid == 0) {
+                fprintf(stderr, "알 수 없는 명령어: '%s'\n", args[0]);
+                exit(EXIT_FAILURE);
+            } else if (pid > 0) {
+                wait(NULL);
+                pid = -1;
+            } else {
+                perror("fork 실패");
+            }
+        }
+    }
+
+    return 0;
 }
 
-void handler_SIGQUIT(int signo) {
+// Ctrl-C 핸들러
+void handle_sigint(int signo) {
+    printf("\nCtrl-C (쉘 종료)\n");
+    exit(0);
+}
+
+// Ctrl-Z 핸들러
+void handle_sigtstp(int signo) {
     if (pid > 0) {
         printf("\nCtrl-Z (쉘 중지)\n");
         kill(pid, SIGTSTP);
@@ -111,57 +104,36 @@ void handler_SIGQUIT(int signo) {
     }
 }
 
-void my_mkdir(int argc, char **argv) {
+// mkdir
+void my_mkdir(int argc, char **args) {
     if (argc < 2) {
-        fprintf(stderr, "mkdir: missing operand\n");
+        fprintf(stderr, "mkdir: 경로를 입력하지 않았습니다.\n");
     } else {
-        if (mkdir(argv[1], 0777) < 0) {
+        if (mkdir(args[1], 0777) < 0) {
             perror("mkdir");
         }
     }
 }
 
-void my_rmdir(int argc, char **argv) {
+// rmdir
+void my_rmdir(int argc, char **args) {
     if (argc < 2) {
-        fprintf(stderr, "rmdir: missing operand\n");
+        fprintf(stderr, "rmdir: 경로를 입력하지 않았습니다.\n");
     } else {
-        if (rmdir(argv[1]) == -1) {
+        if (rmdir(args[1]) == -1) {
             perror("rmdir");
         }
     }
 }
 
-void ln(int argc, char **argv) {
+// ln
+void my_ln(int argc, char **args) {
     if (argc < 3) {
-        fprintf(stderr, "ln: missing operand\n");
-        fprintf(stderr, "Usage: ln <target> <link_name>\n");
+        fprintf(stderr, "ln: 대상 파일 또는 링크 이름이 입력되지 않았습니다.\n");
+        fprintf(stderr, "사용법: ln <대상 파일> <링크 이름>\n");
         return;
     }
-    if (link(argv[1], argv[2]) == -1) {
+    if (link(args[1], args[2]) == -1) {
         perror("ln");
-    }
-}
-
-void launch(int argc, char **argv) {
-    pid = 0;
-    int i = 0;
-    int is_background = 0;
-
-    if (argc != 0 && !strcmp(argv[argc - 1], "&")) {
-        argv[argc - 1] = NULL;
-        is_background = 1;
-    }
-
-    pid = fork();
-    if (pid == 0) {
-        if (is_background) {
-            printf("\n백그라운드 실행 PID: %ld\n", (long)getpid());
-        }
-        exit(EXIT_FAILURE);
-    } else {
-        if (is_background == 0) {
-            int status;
-            wait(&status);
-        }
     }
 }
