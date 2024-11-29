@@ -34,18 +34,18 @@ int main() {
         fgets(buf, sizeof(buf), stdin);
         buf[strcspn(buf, "\n")] = '\0';
 
-        if(!strcmp(buf, "exit")) {
+        if(!strcmp(buf, "exit")) { //exit 누르면 쉘 종료(12-1)
 			printf("쉘 종료 \n");
 			exit(0);
 	    }
-        else if (strlen(buf) == 0 || !strcmp(buf, "\t")) {
+        else if (strlen(buf) == 0 || !strcmp(buf, "\t")) { //사용자가 입력한 문자열을 buf 배열에 저장
             continue;
         }
 
-        argc = getargs(buf, argv);
-        if (argc == 0) continue;
+        argc = getargs(buf, argv); //공백을 기준으로 분리해 argv 배열에 저장
+        if (argc == 0) continue; //argc == 0은 명령어가 비어있을 경우, shell이 빈 상태로 enter 쳤을때 shell> 뜰 수 있게.
 
-        handler(argc, argv);
+        handler(argc, argv);//입력받은 명령어 뭔지 판단해서 맞는 함수 호출
     }
 }
 
@@ -80,7 +80,7 @@ void handler(int argc, char **argv) {
     }
 }
 
-int getargs(char *cmd, char **argv) {
+int getargs(char *cmd, char **argv) { // 입력받은거 argv 배열에 저장 argv 배열에 저장하는 함수 함수
     int argc = 0;
 
     while (*cmd) {
@@ -156,10 +156,6 @@ void launch(int argc, char **argv) {
     if (pid == 0) {
         if (is_background) {
             printf("\n백그라운드 실행 PID: %ld\n", (long)getpid());
-        }
-
-        if (execvp(argv[0], argv) < 0) {
-            perror("[ERROR] EXECUTION: ");
         }
         exit(EXIT_FAILURE);
     } else {
