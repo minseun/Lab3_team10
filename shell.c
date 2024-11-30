@@ -130,10 +130,23 @@ void my_rmdir(int argc, char **args) {
 void my_ln(int argc, char **args) {
     if (argc < 3) {
         fprintf(stderr, "ln: 대상 파일 또는 링크 이름이 입력되지 않았습니다.\n");
-        fprintf(stderr, "사용법: ln <대상 파일> <링크 이름>\n");
+        fprintf(stderr, "사용법: ln [-s] <대상 파일> <링크 이름>\n");
         return;
     }
-    if (link(args[1], args[2]) == -1) {
-        perror("ln");
+
+    if (argc == 4 && strcmp(args[1], "-s") == 0) {
+        if (symlink(args[2], args[3]) == -1) {
+            perror("ln (symlink)");
+        } else {
+            printf("심볼릭 링크 생성: %s -> %s\n", args[3], args[2]);
+        }
+    } else if (argc == 3) {
+        if (link(args[1], args[2]) == -1) {
+            perror("ln (hard link)");
+        } else {
+            printf("하드 링크 생성: %s -> %s\n", args[2], args[1]);
+        }
+    } else {
+        fprintf(stderr, "ln: 잘못된 사용법입니다. 사용법: ln [-s] <대상 파일> <링크 이름>\n");
     }
 }
