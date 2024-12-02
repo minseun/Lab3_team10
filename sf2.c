@@ -20,6 +20,7 @@ void execute_command(char *cmd);
 void handle_sigint(int signo);
 void handle_sigtstp(int signo);
 void handler(int argc, char **argv);
+void process_command(char *cmd);
 void my_ls(const char *dir_path);
 void my_pwd();
 void my_cd(const char *path);
@@ -70,11 +71,13 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        if (buf[strlen(buf) - 1] == '&') {
+        if (strchr(buf, '|') != NULL) {
+            process_command(buf);
+        } else if (buf[strlen(buf) - 1] == '&') {
             execute_command(buf);  // 백그라운드 명령어 실행
         } else {
-            argc = getargs(buf, args);  // 명령어 인자 처리
-            handler(argc, args);  // handler 함수 호출
+            argc = getargs(buf, args);
+            handler(argc, args);
         }
     }
     return 0;
@@ -141,7 +144,7 @@ void execute_command(char *cmd) {
     // 리디렉션 처리
     redirect_io(argv, &argc, &in_fd, &out_fd);
 
-    pid_t pid = fork();	//자식 프로세스 생성
+    pid_t pid = fork(); //자식 프로세스 생성
     if (pid < 0) {
         perror("fork failed");
         exit(1);
@@ -357,7 +360,7 @@ void my_rmdir(int argc, char **argv) {
 // ln 명령어
 void my_ln(int argc, char **argv) {
     if (argc < 3) {
-        fprintf(stderr, "ln: 대상 파일 또는 링크 이름이 입력되지 않았습니다.\n");
+        fprintf(stderr, "ln: 대상 파일 또는 링크 이름이 입력되지 않았 습니다.\n");
         fprintf(stderr, "사용법: ln [-s] <대상 파일> <링크 이름>\n");
         return;
     }
@@ -375,7 +378,7 @@ void my_ln(int argc, char **argv) {
             printf("하드 링크 생성: %s -> %s\n", argv[2], argv[1]);
         }
     } else {
-        fprintf(stderr, "ln: 잘못된 사용법입니다. 사용법: ln [-s] <대상 파일> <링크 이름>\n");
+        fprintf(stderr, "ln: 잘못된 사용법입니다. 사용법: ln [-s] <대 상 파일> <링크 이름>\n");
     }
 }
 
@@ -429,7 +432,7 @@ void my_mv(int argc, char **argv) {
     if (stat(argv[2], &statbuf) == 0 && S_ISDIR(statbuf.st_mode)) {
         // 대상이 디렉토리인 경우
         char dest[BUFSIZE];
-        snprintf(dest, sizeof(dest), "%s/%s", argv[2], argv[1]);  // 대상 디렉토리에 파일을 이동
+        snprintf(dest, sizeof(dest), "%s/%s", argv[2], argv[1]);  //  대상 디렉토리에 파일을 이동
         if (rename(argv[1], dest) == 0) {
             printf("파일이 이동되었습니다: %s -> %s\n", argv[1], dest);
         } else {
@@ -472,7 +475,7 @@ void handler(int argc, char **argv) {
     } else if (strcmp(argv[0], "cd") == 0) {
         my_cd(argc > 1 ? argv[1] : ".");
     } else if (strcmp(argv[0], "mkdir") == 0) {
-        my_mkdir(argc, argv);  // 경로 인자가 부족하면 오류 메시지를 출력
+        my_mkdir(argc, argv);  // 경로 인자가 부족하면 오류 메시지를  출력
     } else if (strcmp(argv[0], "rmdir") == 0) {
         my_rmdir(argc, argv);
     } else if (strcmp(argv[0], "ln") == 0) {
