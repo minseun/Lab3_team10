@@ -13,19 +13,12 @@
 #include <fcntl.h>
 #include <errno.h>
 
+
 #define BUFSIZE 300
 
 int getargs(char *cmd, char **argv);
 void execute_command(char *cmd);
-void handle_sigint(int signo);
-void handle_sigtstp(int signo);
 void handler(int argc, char **argv);
-void my_ls(const char *dir_path);
-void my_pwd();
-void my_cd(const char *path);
-void my_mkdir(int argc, char **argv);
-void my_rmdir(int argc, char **argv);
-void my_ln(int argc, char **argv);
 void my_cp(int argc, char **argv);
 void my_rm(int argc, char **argv);
 void my_mv(int argc, char **argv);
@@ -39,10 +32,6 @@ void handle_pipe(char **argv1, int argc1, char **argv2, int argc2);
 pid_t pid = -1; // 자식 프로세스가 없을 때 -1
 
 int main(int argc, char *argv[]) {
-    // 신호 핸들러 설정
-    signal(SIGINT, handle_sigint);
-    signal(SIGTSTP, handle_sigtstp);
-
     char buf[BUFSIZE];
     char *args[50];
 
@@ -103,13 +92,6 @@ void execute_command(char *cmd) {
     char *argv[50];
     int argc = getargs(cmd, argv);
 
-    // 백그라운드 명령어 처리
-    int isBackground = 0;
-    if (argc > 0 && strcmp(argv[argc - 1], "&") == 0) {
-        isBackground = 1;
-        argv[argc - 1] = NULL; // '&'를 인자 목록에서 제거
-    }
-
     // 파이프 처리
     char **argv1 = argv;
     char **argv2 = NULL;
@@ -131,7 +113,7 @@ void execute_command(char *cmd) {
             argc2++;
         }
 
-        handle_pipe(argv1, argc1, argv2, argc2);
+        handle_pipe(argv1, argc1, argv2, argc2); 
         return;
     }
 
@@ -141,7 +123,7 @@ void execute_command(char *cmd) {
     // 리디렉션 처리
     redirect_io(argv, &argc, &in_fd, &out_fd);
 
-    pid_t pid = fork();	//자식 프로세스 생성
+    pid_t pid = fork();
     if (pid < 0) {
         perror("fork failed");
         exit(1);
@@ -157,7 +139,7 @@ void execute_command(char *cmd) {
             dup2(out_fd, STDOUT_FILENO);
             close(out_fd);
         }
-
+        
         if (execvp(argv[0], argv) == -1) {
             perror("execvp failed");
             exit(1);
@@ -166,29 +148,7 @@ void execute_command(char *cmd) {
         // 부모 프로세스
         if (in_fd != 0) close(in_fd);
         if (out_fd != 1) close(out_fd);
-
-        // 백그라운드 실행일 경우 대기하지 않음
-        if (!isBackground) {
-            wait(NULL);  // 자식 프로세스가 끝날 때까지 대기
-        } else {
-            printf("Background process started: %d\n", pid);
-        }
-    }
-}
-
-// Ctrl-C 핸들러
-void handle_sigint(int signo) {
-    printf("\nCtrl-C (쉘 종료)\n");
-    exit(0);
-}
-
-// Ctrl-Z 핸들러
-void handle_sigtstp(int signo) {
-    if (pid > 0) {
-        printf("\nCtrl-Z (쉘 중지)\n");
-        kill(pid, SIGTSTP);
-    } else {
-        printf("\nCtrl-Z가 눌렸으나, 중단할 프로세스가 존재하지 않습니다.\n");
+        wait(NULL);
     }
 }
 
@@ -200,8 +160,8 @@ void handle_pipe(char **argv1, int argc1, char **argv2, int argc2) {
     }
 
     pid_t pid1 = fork();
-
-        if (pid1 < 0) {
+    
+	if (pid1 < 0) {
         perror("fork failed");
         exit(1);
     }
@@ -290,95 +250,6 @@ void redirect_io(char **argv, int *argc, int *in_fd, int *out_fd) {
     argv[*argc] = NULL;
 }
 
-// ls 명령어
-void my_ls(const char *dir_path) {
-    DIR *dir = opendir(dir_path);
-    if (!dir) {
-        perror("opendir");
-        return;
-    }
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        printf("%s\n", entry->d_name);
-    }
-    closedir(dir);
-}
-
-// pwd 명령어
-void my_pwd() {
-    char cwd[PATH_MAX];
-    if (getcwd(cwd, sizeof(cwd))) {
-        printf("%s\n", cwd);
-    } else {
-        perror("getcwd");
-    }
-}
-
-// cd 명령어
-void my_cd(const char *path) {
-    if (chdir(path) == 0) {  // 디렉토리 변경
-        printf("디렉토리가 변경되었습니다: %s\n", path);
-
-        // 디렉토리 변경 후 현재 작업 디렉토리 확인
-        char cwd[1024];  // 현재 작업 디렉토리 경로를 저장할 배열
-        if (getcwd(cwd, sizeof(cwd)) != NULL) {
-            printf("현재 디렉토리: %s\n", cwd);  // 변경된 디렉토리 출력
-        } else {
-            perror("getcwd");  // 오류 발생 시 오류 메시지 출력
-        }
-    } else {
-        perror("chdir");  // 오류 발생 시 오류 메시지 출력
-    }
-}
-
-// mkdir 명령어
-void my_mkdir(int argc, char **argv) {
-    if (argc < 2) {
-        fprintf(stderr, "mkdir: 경로를 입력하지 않았습니다.\n");
-        return;
-    }
-
-    if (mkdir(argv[1], 0777) < 0) {
-        perror("mkdir");
-    }
-}
-
-// rmdir 명령어
-void my_rmdir(int argc, char **argv) {
-    if (argc < 2) {
-        fprintf(stderr, "rmdir: 경로를 입력하지 않았습니다.\n");
-    } else {
-        if (rmdir(argv[1]) < 0) {
-            perror("rmdir");
-        }
-    }
-}
-
-// ln 명령어
-void my_ln(int argc, char **argv) {
-    if (argc < 3) {
-        fprintf(stderr, "ln: 대상 파일 또는 링크 이름이 입력되지 않았습니다.\n");
-        fprintf(stderr, "사용법: ln [-s] <대상 파일> <링크 이름>\n");
-        return;
-    }
-
-    if (argc == 4 && strcmp(argv[1], "-s") == 0) {
-        if (symlink(argv[2], argv[3]) == -1) {
-            perror("ln (symlink)");
-        } else {
-            printf("심볼릭 링크 생성: %s -> %s\n", argv[3], argv[2]);
-        }
-    } else if (argc == 3) {
-        if (link(argv[1], argv[2]) == -1) {
-            perror("ln (hard link)");
-        } else {
-            printf("하드 링크 생성: %s -> %s\n", argv[2], argv[1]);
-        }
-    } else {
-        fprintf(stderr, "ln: 잘못된 사용법입니다. 사용법: ln [-s] <대상 파일> <링크 이름>\n");
-    }
-}
-
 // cp 명령어
 void my_cp(int argc, char **argv) {
     if (argc < 3) {
@@ -465,19 +336,7 @@ void my_cat(int argc, char **argv) {
 
 void handler(int argc, char **argv) {
 
-    if (strcmp(argv[0], "pwd") == 0) {
-        my_pwd();
-    } else if (strcmp(argv[0], "ls") == 0) {
-        my_ls(argc > 1 ? argv[1] : ".");
-    } else if (strcmp(argv[0], "cd") == 0) {
-        my_cd(argc > 1 ? argv[1] : ".");
-    } else if (strcmp(argv[0], "mkdir") == 0) {
-        my_mkdir(argc, argv);  // 경로 인자가 부족하면 오류 메시지를 출력
-    } else if (strcmp(argv[0], "rmdir") == 0) {
-        my_rmdir(argc, argv);
-    } else if (strcmp(argv[0], "ln") == 0) {
-        my_ln(argc, argv);
-    } else if (strcmp(argv[0], "cp") == 0) {
+    if (strcmp(argv[0], "cp") == 0) {
         my_cp(argc, argv);
     } else if (strcmp(argv[0], "rm") == 0) {
         my_rm(argc, argv);
